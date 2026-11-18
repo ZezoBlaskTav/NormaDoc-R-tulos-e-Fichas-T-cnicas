@@ -1,21 +1,44 @@
-import React, { useState } from 'react';
-import { Plus, Trash2, Check, RefreshCw } from 'lucide-react';
+import React, { useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ImagePlus,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react';
+import {
+  ANIMAL_STAMP_LABELS,
+  AnimalStampType,
   CATEGORY_LABELS,
+  DEFAULT_ANIMAL_STAMP,
+  DEFAULT_LABEL_DESIGN,
   DocumentStatus,
+  FOOD_CLASSIFICATIONS,
+  FoodClassificationSpec,
   GhsPictogramId,
+  LabelFormat,
+  LupaLayout,
+  NutritionTableLayout,
   ProductCategory,
   ProductDocument,
   STATUS_LABELS,
 } from '../types/product';
 import { calculateEan13CheckDigit, normalizeEan13 } from '../utils/barcode';
 import { computeLupaAlerts } from '../utils/nutrition';
-import { GHS_LABELS, GhsPictogramSvg } from './RegulatoryIcons';
+import { FoodClassificationGuide } from './FoodClassificationGuide';
+import { GuidedWizard } from './GuidedWizard';
+import { AnimalInspectionStamp, AnvisaLupas, GHS_LABELS, GhsPictogramSvg } from './RegulatoryIcons';
 
-type EditorTab = 'identificacao' | 'composicao' | 'parametros' | 'logistica';
+type EditorTab = 'identificacao' | 'diagramacao' | 'composicao' | 'parametros' | 'logistica';
+type AuthoringMode = 'perguntas' | 'completo' | 'guia-alimentos';
 
 interface ProductEditorProps {
   product: ProductDocument;
+  labelFormat: LabelFormat;
+  onLabelFormatChange: (format: LabelFormat) => void;
   onChange: (updated: ProductDocument) => void;
 }
 
@@ -38,6 +61,13 @@ const ALL_GHS_PICTOGRAMS: GhsPictogramId[] = [
   'oxidizer',
 ];
 
+const SECTION_LABELS: Record<'lupa' | 'composicao' | 'nutricao' | 'ghs', string> = {
+  lupa: 'Lupa Frontal ANVISA (Alto em)',
+  composicao: 'Ingredientes, Alergênicos e Modo de Uso',
+  nutricao: 'Tabela de Informação Nutricional',
+  ghs: 'Bloco de Segurança Química (GHS)',
+};
+
 const inputClass =
   'w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-700/15 transition-colors';
 
@@ -45,11 +75,75 @@ const monoInputClass = `${inputClass} font-mono tabular-nums`;
 
 const labelClass = 'block text-xs font-medium text-slate-700 mb-1';
 
-export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange }) => {
+export const ProductEditor: React.FC<ProductEditorProps> = ({
+  product,
+  labelFormat,
+  onLabelFormatChange,
+  onChange,
+}) => {
+  const [authoringMode, setAuthoringMode] = useState<AuthoringMode>('perguntas');
   const [activeTab, setActiveTab] = useState<EditorTab>('identificacao');
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const design = product.labelDesign || DEFAULT_LABEL_DESIGN;
+  const animalStamp = product.animalStamp || DEFAULT_ANIMAL_STAMP;
+
+  const applyFoodClassification = (spec: FoodClassificationSpec) => {
+    const currentStamp = product.animalStamp || DEFAULT_ANIMAL_STAMP;
+    const nextStampType = spec.requiresAnimalStamp
+      ? currentStamp.type !== 'nenhum'
+        ? currentStamp.type
+        : spec.defaultStamp
+      : 'nenhum';
+
+    onChange({
+      ...product,
+      category: 'alimentos',
+      foodClassification: spec.id,
+      alcoholWarning: spec.defaultAlcoholWarning || '',
+      allergensText:
+        !product.allergensText.trim() && spec.defaultAllergensHint
+          ? spec.defaultAllergensHint
+          : product.allergensText,
+      nutrition: {
+        ...product.nutrition,
+        enabled: spec.requiresNutrition,
+        physicalState: spec.physicalState,
+        servingUnit: spec.physicalState === 'liquido' ? 'ml' : 'g',
+      },
+      ghs: {
+        ...product.ghs,
+        enabled: false,
+      },
+      animalStamp: {
+        ...currentStamp,
+        type: nextStampType,
+      },
+    });
+  };
 
   const updateField = <K extends keyof ProductDocument>(key: K, value: ProductDocument[K]) => {
     onChange({ ...product, [key]: value });
+  };
+
+  const updateDesign = <K extends keyof ProductDocument['labelDesign']>(
+    key: K,
+    value: ProductDocument['labelDesign'][K]
+  ) => {
+    onChange({
+      ...product,
+      labelDesign: { ...design, [key]: value },
+    });
+  };
+
+  const updateAnimalStamp = <K extends keyof ProductDocument['animalStamp']>(
+    key: K,
+    value: ProductDocument['animalStamp'][K]
+  ) => {
+    onChange({
+      ...product,
+      animalStamp: { ...animalStamp, [key]: value },
+    });
   };
 
   const updateManufacturer = (key: keyof ProductDocument['manufacturer'], value: string) => {
@@ -90,6 +184,29 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
     const digits = product.ean13.replace(/\D/g, '').padEnd(12, '0').slice(0, 12);
     const check = calculateEan13CheckDigit(digits);
     updateField('ean13', `${digits}${check}`);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        updateDesign('logoDataUrl', reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const moveSection = (index: number, direction: -1 | 1) => {
+    const order = [...(design.sectionOrder || ['lupa', 'composicao', 'nutricao', 'ghs'])];
+    const target = index + direction;
+    if (target < 0 || target >= order.length) return;
+    const temp = order[index];
+    order[index] = order[target];
+    order[target] = temp;
+    updateDesign('sectionOrder', order);
   };
 
   const toggleGhsPictogram = (pic: GhsPictogramId) => {
@@ -146,37 +263,110 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
     );
   };
 
+  const recommendedNutritionLayout: NutritionTableLayout =
+    labelFormat === '100x70' || labelFormat === '140x80' ? 'horizontal' : 'vertical';
+
   const tabs: { id: EditorTab; label: string }[] = [
     { id: 'identificacao', label: 'Identificação' },
-    { id: 'composicao', label: 'Composição & Normas' },
+    { id: 'diagramacao', label: 'Diagramação & Logo' },
+    { id: 'composicao', label: 'Composição & Selos' },
     { id: 'parametros', label: 'Nutrição & Parâmetros' },
     { id: 'logistica', label: 'Logística & Embalagem' },
   ];
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Editor Sub-navigation Tabs */}
-      <div className="border-b border-slate-200 px-5 pt-3 flex items-center gap-1 overflow-x-auto bg-slate-50/70">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-2 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 transition-colors ${
-                isActive
-                  ? 'border-blue-700 text-blue-800 bg-white'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+      {/* Authoring Mode Switcher (Questions / Complete Editor / Foods & Beverages Internal Guide) */}
+      <div className="border-b border-slate-200 px-4 py-2.5 bg-white flex items-center justify-between gap-2 overflow-x-auto">
+        <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-md">
+          <button
+            type="button"
+            onClick={() => setAuthoringMode('perguntas')}
+            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
+              authoringMode === 'perguntas'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Modo Perguntas
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthoringMode('completo')}
+            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
+              authoringMode === 'completo'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Edição Completa
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthoringMode('guia-alimentos')}
+            className={`px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
+              authoringMode === 'guia-alimentos'
+                ? 'bg-white text-blue-800 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Alimentos & Bebidas
+          </button>
+        </div>
+
+        {product.category === 'alimentos' && product.foodClassification && (
+          <span className="hidden xl:inline text-[11px] text-slate-500 truncate max-w-[200px]">
+            {FOOD_CLASSIFICATIONS.find((c) => c.id === product.foodClassification)?.name.split(' (')[0]}
+          </span>
+        )}
       </div>
 
-      {/* Editor Body */}
+      {authoringMode === 'perguntas' && (
+        <GuidedWizard
+          product={product}
+          labelFormat={labelFormat}
+          onLabelFormatChange={onLabelFormatChange}
+          onChange={onChange}
+          onApplyFoodClassification={applyFoodClassification}
+          onOpenFoodGuide={() => setAuthoringMode('guia-alimentos')}
+          onOpenExpertMode={() => setAuthoringMode('completo')}
+        />
+      )}
+
+      {authoringMode === 'guia-alimentos' && (
+        <FoodClassificationGuide
+          product={product}
+          onApplyClassification={(spec) => {
+            applyFoodClassification(spec);
+          }}
+          onGoToWizard={() => setAuthoringMode('perguntas')}
+        />
+      )}
+
+      {authoringMode === 'completo' && (
+        <>
+          {/* Editor Sub-navigation Tabs */}
+          <div className="border-b border-slate-200 px-4 pt-2 flex items-center gap-1 overflow-x-auto bg-slate-50/70">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-2 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 transition-colors ${
+                    isActive
+                      ? 'border-blue-700 text-blue-800 bg-white'
+                      : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Editor Body */}
       <div className="flex-1 overflow-y-auto studio-scroll p-6 space-y-6">
         {activeTab === 'identificacao' && (
           <>
@@ -231,6 +421,33 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
                     className={inputClass}
                     value={product.subtitle}
                     onChange={(e) => updateField('subtitle', e.target.value)}
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-700">
+                      Dizeres Obrigatórios de Origem (Rótulo)
+                    </label>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      {['INDÚSTRIA BRASILEIRA', 'FABRICADO NO BRASIL', 'PRODUTO IMPORTADO'].map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => updateField('industryOriginText', opt)}
+                          className="text-blue-700 hover:underline"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    className={`${inputClass} uppercase font-medium`}
+                    placeholder="Ex.: INDÚSTRIA BRASILEIRA"
+                    value={product.industryOriginText}
+                    onChange={(e) => updateField('industryOriginText', e.target.value)}
                   />
                 </div>
 
@@ -340,35 +557,6 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
                   />
                 </div>
               </div>
-
-              {/* Accent Color Selector */}
-              <div>
-                <label className={labelClass}>Cor de Destaque do Rótulo</label>
-                <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                  {ACCENT_SWATCHES.map((sw) => {
-                    const selected = product.labelAccentColor.toLowerCase() === sw.value.toLowerCase();
-                    return (
-                      <button
-                        key={sw.value}
-                        type="button"
-                        onClick={() => updateField('labelAccentColor', sw.value)}
-                        title={sw.label}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 border rounded-md text-xs transition-colors ${
-                          selected
-                            ? 'border-slate-900 bg-slate-100 font-medium text-slate-900'
-                            : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                        }`}
-                      >
-                        <span
-                          className="w-3 h-3 rounded-xs shrink-0"
-                          style={{ backgroundColor: sw.value }}
-                        />
-                        <span>{sw.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             </section>
 
             {/* Manufacturer & Legal Info */}
@@ -433,7 +621,7 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Conselho de Classe (CREA / CRQ / CRF)</label>
+                  <label className={labelClass}>Conselho de Classe (CREA / CRQ / CRF / CRMV)</label>
                   <input
                     type="text"
                     className={monoInputClass}
@@ -455,9 +643,438 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
           </>
         )}
 
+        {activeTab === 'diagramacao' && (
+          <>
+            {/* Logo Upload & Placement */}
+            <section className="space-y-4">
+              <div className="border-b border-slate-200 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900">Logotipo da Empresa</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Insira o logotipo oficial em PNG, JPG ou SVG para exibição no rótulo e na ficha técnica.
+                </p>
+              </div>
+
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="hidden"
+              />
+
+              <div className="border border-slate-200 rounded-md p-4 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {design.logoDataUrl ? (
+                    <img
+                      src={design.logoDataUrl}
+                      alt="Logo carregado"
+                      className="h-12 w-20 object-contain bg-white border border-slate-200 rounded p-1"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="h-12 w-20 border border-dashed border-slate-300 bg-white rounded flex items-center justify-center text-[11px] text-slate-400">
+                      Sem logo
+                    </div>
+                  )}
+                  <div className="text-xs">
+                    <div className="font-medium text-slate-900">
+                      {design.logoDataUrl ? 'Logotipo ativo no documento' : 'Nenhum logotipo enviado'}
+                    </div>
+                    <div className="text-slate-500">Tamanho mínimo: 24 px para legibilidade</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-700 rounded-md hover:bg-blue-800 whitespace-nowrap"
+                  >
+                    <ImagePlus className="w-3.5 h-3.5" />
+                    {design.logoDataUrl ? 'Trocar logo' : 'Carregar logo'}
+                  </button>
+                  {design.logoDataUrl && (
+                    <button
+                      type="button"
+                      onClick={() => updateDesign('logoDataUrl', '')}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Remover
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium text-slate-700">Altura do Logo</span>
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {design.logoHeightPx} px (mín. 24 px)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={24}
+                    max={92}
+                    step={2}
+                    value={design.logoHeightPx}
+                    onChange={(e) => updateDesign('logoHeightPx', Number(e.target.value))}
+                    className="w-full accent-blue-700"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Posição no Cabeçalho</label>
+                  <select
+                    className={inputClass}
+                    value={design.logoPosition}
+                    onChange={(e) =>
+                      updateDesign('logoPosition', e.target.value as 'left' | 'right' | 'top-center')
+                    }
+                  >
+                    <option value="left">Esquerda do título</option>
+                    <option value="right">Direita (acima do peso)</option>
+                    <option value="top-center">Centralizado no topo</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            {/* Label Canvas Size & Header Style */}
+            <section className="space-y-4 pt-2">
+              <div className="border-b border-slate-200 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900">Dimensões do Rótulo e Estilo Visual</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Escolha um formato padrão ou defina largura e altura personalizadas em milímetros.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(
+                  [
+                    { id: '100x150', label: '100 × 150 mm' },
+                    { id: '100x70', label: '100 × 70 mm' },
+                    { id: '140x80', label: '140 × 80 mm' },
+                    { id: 'custom', label: 'Personalizado' },
+                  ] as { id: LabelFormat; label: string }[]
+                ).map((fmt) => (
+                  <button
+                    key={fmt.id}
+                    type="button"
+                    onClick={() => onLabelFormatChange(fmt.id)}
+                    className={`px-3 py-2 text-xs font-medium border rounded-md transition-colors ${
+                      labelFormat === fmt.id
+                        ? 'border-blue-700 bg-blue-50 text-blue-800'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+
+              {labelFormat === 'custom' && (
+                <div className="grid grid-cols-2 gap-4 border border-slate-200 rounded-md p-3.5 bg-slate-50/50">
+                  <div>
+                    <label className={labelClass}>Largura (mm · mín. 55)</label>
+                    <input
+                      type="number"
+                      min={55}
+                      max={210}
+                      className={monoInputClass}
+                      value={design.customWidthMm}
+                      onChange={(e) =>
+                        updateDesign('customWidthMm', Math.max(55, Math.min(210, Number(e.target.value) || 55)))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Altura Mínima (mm · mín. 40)</label>
+                    <input
+                      type="number"
+                      min={40}
+                      max={297}
+                      className={monoInputClass}
+                      value={design.customHeightMm}
+                      onChange={(e) =>
+                        updateDesign('customHeightMm', Math.max(40, Math.min(297, Number(e.target.value) || 40)))
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className={labelClass}>Cor de Destaque do Cabeçalho</label>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  {ACCENT_SWATCHES.map((sw) => {
+                    const selected = product.labelAccentColor.toLowerCase() === sw.value.toLowerCase();
+                    return (
+                      <button
+                        key={sw.value}
+                        type="button"
+                        onClick={() => updateField('labelAccentColor', sw.value)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 border rounded-md text-xs transition-colors ${
+                          selected
+                            ? 'border-slate-900 bg-slate-100 font-medium text-slate-900'
+                            : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        <span className="w-3 h-3 rounded-xs shrink-0" style={{ backgroundColor: sw.value }} />
+                        <span>{sw.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-5 text-xs text-slate-700 pt-1">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={design.showHeaderBanner}
+                    onChange={(e) => updateDesign('showHeaderBanner', e.target.checked)}
+                  />
+                  <span>Faixa colorida no cabeçalho</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={design.showSubtitleOnLabel}
+                    onChange={(e) => updateDesign('showSubtitleOnLabel', e.target.checked)}
+                  />
+                  <span>Exibir subtítulo no rótulo</span>
+                </label>
+              </div>
+            </section>
+
+            {/* Section Size Controls respecting Legal Minimums */}
+            <section className="space-y-4 pt-2">
+              <div className="border-b border-slate-200 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Tamanho das Seções (Respeitando os Mínimos Legais)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Ajuste a proporção de cada bloco sem violar os limites mínimos de legibilidade ANVISA e GS1.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium text-slate-700">Título do Produto</span>
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {design.titleFontPx} px (mín. 12 px)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={12}
+                    max={24}
+                    step={0.5}
+                    value={design.titleFontPx}
+                    onChange={(e) => updateDesign('titleFontPx', Number(e.target.value))}
+                    className="w-full accent-blue-700"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium text-slate-700">Texto Geral / Ingredientes</span>
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {design.bodyFontPx} px (mín. 8 px / 1 mm)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={8}
+                    max={12.5}
+                    step={0.5}
+                    value={design.bodyFontPx}
+                    onChange={(e) => updateDesign('bodyFontPx', Number(e.target.value))}
+                    className="w-full accent-blue-700"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium text-slate-700">Escala da Tabela Nutricional</span>
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {Math.round(design.nutritionScale * 100)}% (mín. 78%)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.78}
+                    max={1.2}
+                    step={0.02}
+                    value={design.nutritionScale}
+                    onChange={(e) => updateDesign('nutritionScale', Number(e.target.value))}
+                    className="w-full accent-blue-700"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium text-slate-700">Escala da Lupa ANVISA</span>
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {Math.round(design.lupaScale * 100)}% (mín. 75%)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.75}
+                    max={1.3}
+                    step={0.05}
+                    value={design.lupaScale}
+                    onChange={(e) => updateDesign('lupaScale', Number(e.target.value))}
+                    className="w-full accent-blue-700"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-medium text-slate-700">Largura do Código de Barras EAN-13</span>
+                    <span className="font-mono tabular-nums text-slate-600">
+                      {design.barcodeWidthPx} px (mín. GS1: 112 px)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={112}
+                    max={200}
+                    step={4}
+                    value={design.barcodeWidthPx}
+                    onChange={(e) => updateDesign('barcodeWidthPx', Number(e.target.value))}
+                    className="w-full accent-blue-700"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Section Ordering */}
+            <section className="space-y-3 pt-2">
+              <div className="border-b border-slate-200 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900">Ordem das Seções (Rótulo Vertical)</h3>
+                <p className="text-xs text-slate-500">Reorganize a sequência vertical dos blocos no rótulo.</p>
+              </div>
+              <div className="divide-y divide-slate-200 border border-slate-200 rounded-md">
+                {(design.sectionOrder || ['lupa', 'composicao', 'nutricao', 'ghs']).map((sec, idx, arr) => (
+                  <div key={sec} className="flex items-center justify-between px-3 py-2 text-xs">
+                    <span className="font-medium text-slate-800">
+                      {idx + 1}. {SECTION_LABELS[sec]}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => moveSection(idx, -1)}
+                        className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-35"
+                        title="Mover para cima"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === arr.length - 1}
+                        onClick={() => moveSection(idx, 1)}
+                        className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-35"
+                        title="Mover para baixo"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+
         {activeTab === 'composicao' && (
           <>
+            {/* Animal Origin Inspection Stamp Section */}
             <section className="space-y-4">
+              <div className="border-b border-slate-200 pb-2">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Carimbo Oficial para Produtos de Origem Animal (POA)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Configure o selo de inspeção sanitária (SIF, SIE, SIM, SISBI-POA ou Selo ARTE) conforme Decreto 9.013/2017.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 items-start border border-slate-200 rounded-md p-3.5 bg-slate-50/40">
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                  <div className="sm:col-span-2">
+                    <label className={labelClass}>Tipo de Carimbo Sanitário</label>
+                    <select
+                      className={inputClass}
+                      value={animalStamp.type}
+                      onChange={(e) => updateAnimalStamp('type', e.target.value as AnimalStampType)}
+                    >
+                      {(Object.entries(ANIMAL_STAMP_LABELS) as [AnimalStampType, string][]).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {animalStamp.type !== 'nenhum' && (
+                    <>
+                      <div>
+                        <label className={labelClass}>Nº do Estabelecimento</label>
+                        <input
+                          type="text"
+                          className={monoInputClass}
+                          placeholder="Ex.: 3842"
+                          value={animalStamp.registrationNumber}
+                          onChange={(e) => updateAnimalStamp('registrationNumber', e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Sigla / Jurisdição (Inferior)</label>
+                        <input
+                          type="text"
+                          className={`${inputClass} uppercase`}
+                          placeholder="BRASIL / MG / SP"
+                          value={animalStamp.regionLabel}
+                          onChange={(e) => updateAnimalStamp('regionLabel', e.target.value)}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="font-medium text-slate-700">Tamanho do Carimbo</span>
+                          <span className="font-mono tabular-nums text-slate-600">
+                            {animalStamp.stampSizePx} px (mín. 44 px)
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={44}
+                          max={88}
+                          step={2}
+                          value={animalStamp.stampSizePx}
+                          onChange={(e) => updateAnimalStamp('stampSizePx', Number(e.target.value))}
+                          className="w-full accent-blue-700"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {animalStamp.type !== 'nenhum' && (
+                  <div className="shrink-0 flex flex-col items-center justify-center p-2 bg-white border border-slate-200 rounded-md">
+                    <AnimalInspectionStamp stamp={animalStamp} />
+                    <span className="text-[10px] font-mono text-slate-500 mt-1">Prévia do Carimbo</span>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Ingredients & Allergens */}
+            <section className="space-y-4 pt-2">
               <div className="border-b border-slate-200 pb-2">
                 <h3 className="text-sm font-semibold text-slate-900">Declaração de Ingredientes e Alergênicos</h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -708,9 +1325,11 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
             <section className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Tabela Nutricional (ANVISA RDC 429 / IN 75)</h3>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Tabela Nutricional (ANVISA RDC 429 / IN 75)
+                  </h3>
                   <p className="text-xs text-slate-500">
-                    Cálculo automático de porção, %VD e detecção das lupas frontais por 100g/ml.
+                    Cálculo automático de porção, %VD e lupas frontais oficiais por 100g/ml.
                   </p>
                 </div>
                 <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
@@ -726,6 +1345,91 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
 
               {product.nutrition.enabled && (
                 <div className="space-y-4">
+                  {/* Question prompting the user which ANVISA table format best adapts to the label */}
+                  <div className="border border-slate-200 rounded-md p-3.5 bg-slate-50/50 space-y-2.5">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900">
+                        Qual modelo de Informação Nutricional melhor se adapta ao seu rótulo?
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        Escolha entre os 3 modelos oficiais da IN 75/2020 da ANVISA conforme a geometria da embalagem.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {(
+                        [
+                          {
+                            id: 'vertical',
+                            title: '1. Modelo Vertical',
+                            desc: 'Padrão clássico em coluna única para rótulos verticais.',
+                          },
+                          {
+                            id: 'horizontal',
+                            title: '2. Modelo Horizontal',
+                            desc: 'Título e porção à esquerda; ideal para rótulos largos.',
+                          },
+                          {
+                            id: 'vertical-quebrado',
+                            title: '3. Vertical Quebrado',
+                            desc: 'Divide os nutrientes em 2 blocos para áreas baixas e largas.',
+                          },
+                        ] as { id: NutritionTableLayout; title: string; desc: string }[]
+                      ).map((opt) => {
+                        const selected = (product.nutrition.tableLayout || 'vertical') === opt.id;
+                        const isRec = recommendedNutritionLayout === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateNutrition('tableLayout', opt.id)}
+                            className={`text-left p-2.5 border rounded-md transition-colors ${
+                              selected
+                                ? 'border-blue-700 bg-white ring-2 ring-blue-700/15'
+                                : 'border-slate-200 bg-white hover:border-slate-300'
+                            }`}
+                          >
+                            {/* Mini wireframe diagram matching ANVISA manual */}
+                            <div className="h-8 mb-2 border border-slate-300 bg-slate-50 p-1 flex gap-1">
+                              {opt.id === 'vertical' && (
+                                <div className="w-full flex flex-col gap-0.5">
+                                  <div className="h-1.5 bg-slate-800 w-full" />
+                                  <div className="flex-1 grid grid-cols-4 gap-0.5">
+                                    <div className="col-span-2 bg-slate-300" />
+                                    <div className="bg-slate-200" />
+                                    <div className="bg-slate-200" />
+                                  </div>
+                                </div>
+                              )}
+                              {opt.id === 'horizontal' && (
+                                <div className="w-full flex gap-1">
+                                  <div className="w-1/3 bg-slate-800/80" />
+                                  <div className="flex-1 bg-slate-300" />
+                                </div>
+                              )}
+                              {opt.id === 'vertical-quebrado' && (
+                                <div className="w-full flex flex-col gap-0.5">
+                                  <div className="h-1 bg-slate-800 w-full" />
+                                  <div className="flex-1 grid grid-cols-2 gap-1">
+                                    <div className="bg-slate-300" />
+                                    <div className="bg-slate-300" />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-xs font-semibold text-slate-900">{opt.title}</div>
+                            <div className="text-[10.5px] text-slate-500 leading-snug mt-0.5">{opt.desc}</div>
+                            {isRec && (
+                              <div className="text-[10px] font-medium text-blue-700 mt-1">
+                                Recomendado para {labelFormat === 'custom' ? 'este formato' : labelFormat}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
                       <label className={labelClass}>Estado Físico</label>
@@ -882,64 +1586,82 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
                     </div>
                   </div>
 
-                  {/* Lupa Mode & Detection Summary */}
-                  <div className="border border-slate-200 rounded-md p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="text-xs">
-                      <div className="font-semibold text-slate-900">
-                        Rotulagem Frontal (Lupa ANVISA IN 75)
+                  {/* Lupa Mode, Layout & Live Preview */}
+                  <div className="border border-slate-200 rounded-md p-3.5 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="text-xs">
+                        <div className="font-semibold text-slate-900">
+                          Rotulagem Nutricional Frontal (Lupa ANVISA IN 75)
+                        </div>
+                        <div className="text-slate-600 mt-0.5">
+                          {lupaAlerts.any
+                            ? `Alertas ativos: ${[
+                                lupaAlerts.highAddedSugar && 'Açúcar Adicionado',
+                                lupaAlerts.highSatFat && 'Gordura Saturada',
+                                lupaAlerts.highSodium && 'Sódio',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}`
+                            : 'Nenhum nutriente atingiu o limite para lupa frontal.'}
+                        </div>
                       </div>
-                      <div className="text-slate-600 mt-0.5">
-                        {lupaAlerts.any
-                          ? `Alertas ativos: ${[
-                              lupaAlerts.highAddedSugar && 'Açúcar Adicionado',
-                              lupaAlerts.highSatFat && 'Gordura Saturada',
-                              lupaAlerts.highSodium && 'Sódio',
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}`
-                          : 'Nenhum nutriente atingiu o limite para lupa frontal.'}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <select
+                          aria-label="Formato da lupa ANVISA"
+                          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800"
+                          value={design.lupaLayout || 'horizontal'}
+                          onChange={(e) => updateDesign('lupaLayout', e.target.value as LupaLayout)}
+                        >
+                          <option value="horizontal">Lupa Horizontal</option>
+                          <option value="vertical">Lupa Vertical</option>
+                          <option value="bloco">Lupa em Bloco / L</option>
+                        </select>
+                        <select
+                          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800"
+                          value={product.nutrition.lupaMode}
+                          onChange={(e) => updateNutrition('lupaMode', e.target.value as 'auto' | 'manual')}
+                        >
+                          <option value="auto">Automática</option>
+                          <option value="manual">Manual</option>
+                        </select>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <select
-                        className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-800"
-                        value={product.nutrition.lupaMode}
-                        onChange={(e) => updateNutrition('lupaMode', e.target.value as 'auto' | 'manual')}
-                      >
-                        <option value="auto">Detecção Automática</option>
-                        <option value="manual">Seleção Manual</option>
-                      </select>
-                    </div>
-                  </div>
 
-                  {product.nutrition.lupaMode === 'manual' && (
-                    <div className="flex flex-wrap gap-4 text-xs text-slate-700 px-1">
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={product.nutrition.manualLupaSugar}
-                          onChange={(e) => updateNutrition('manualLupaSugar', e.target.checked)}
-                        />
-                        <span>Alto em Açúcar Adicionado</span>
-                      </label>
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={product.nutrition.manualLupaSatFat}
-                          onChange={(e) => updateNutrition('manualLupaSatFat', e.target.checked)}
-                        />
-                        <span>Alto em Gordura Saturada</span>
-                      </label>
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={product.nutrition.manualLupaSodium}
-                          onChange={(e) => updateNutrition('manualLupaSodium', e.target.checked)}
-                        />
-                        <span>Alto em Sódio</span>
-                      </label>
-                    </div>
-                  )}
+                    {lupaAlerts.any && (
+                      <div className="pt-1">
+                        <AnvisaLupas alerts={lupaAlerts} layout={design.lupaLayout || 'horizontal'} scale={1} />
+                      </div>
+                    )}
+
+                    {product.nutrition.lupaMode === 'manual' && (
+                      <div className="flex flex-wrap gap-4 text-xs text-slate-700 pt-1">
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={product.nutrition.manualLupaSugar}
+                            onChange={(e) => updateNutrition('manualLupaSugar', e.target.checked)}
+                          />
+                          <span>Alto em Açúcar Adicionado</span>
+                        </label>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={product.nutrition.manualLupaSatFat}
+                            onChange={(e) => updateNutrition('manualLupaSatFat', e.target.checked)}
+                          />
+                          <span>Alto em Gordura Saturada</span>
+                        </label>
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={product.nutrition.manualLupaSodium}
+                            onChange={(e) => updateNutrition('manualLupaSodium', e.target.checked)}
+                          />
+                          <span>Alto em Sódio</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </section>
@@ -1126,7 +1848,7 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Origem</label>
+                  <label className={labelClass}>Origem (Ficha Técnica)</label>
                   <input
                     type="text"
                     className={inputClass}
@@ -1184,6 +1906,8 @@ export const ProductEditor: React.FC<ProductEditorProps> = ({ product, onChange 
           </>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

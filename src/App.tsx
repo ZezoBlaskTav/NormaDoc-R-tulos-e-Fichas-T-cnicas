@@ -14,8 +14,14 @@ import { DatasheetPreview } from './components/DatasheetPreview';
 import { LabelPreview } from './components/LabelPreview';
 import { ProductEditor } from './components/ProductEditor';
 import { Sidebar } from './components/Sidebar';
-import { INITIAL_PRODUCTS, createNewProduct } from './data/presets';
-import { CATEGORY_LABELS, LabelFormat, ProductCategory, ProductDocument } from './types/product';
+import { INITIAL_PRODUCTS, createNewProduct, migrateProductDocument } from './data/presets';
+import {
+  CATEGORY_LABELS,
+  LabelFormat,
+  NutritionTableLayout,
+  ProductCategory,
+  ProductDocument,
+} from './types/product';
 import { evaluateCompliance } from './utils/compliance';
 
 const STORAGE_KEY = 'normadoc_products_v1';
@@ -31,7 +37,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((item) => migrateProductDocument(item));
         }
       }
     } catch {
@@ -72,14 +78,14 @@ export default function App() {
   const handleDuplicateProduct = (id: string) => {
     const source = products.find((p) => p.id === id);
     if (!source) return;
-    const copy: ProductDocument = {
+    const copy: ProductDocument = migrateProductDocument({
       ...JSON.parse(JSON.stringify(source)),
       id: `prod-${Date.now()}`,
       name: `${source.name} (Cópia)`,
       sku: `${source.sku}-C`,
       status: 'rascunho',
       revision: '01',
-    };
+    });
     setProducts((prev) => [copy, ...prev]);
     setSelectedId(copy.id);
   };
@@ -94,8 +100,9 @@ export default function App() {
   };
 
   const handleImportJson = (doc: ProductDocument) => {
-    setProducts((prev) => [doc, ...prev]);
-    setSelectedId(doc.id);
+    const migrated = migrateProductDocument(doc);
+    setProducts((prev) => [migrated, ...prev]);
+    setSelectedId(migrated.id);
   };
 
   const handleResetDefaults = () => {
@@ -214,7 +221,12 @@ export default function App() {
               mobilePane === 'editor' ? 'flex' : 'hidden lg:flex'
             } flex-1 min-w-0 border-r border-slate-200 flex-col h-full`}
           >
-            <ProductEditor product={activeProduct} onChange={handleUpdateProduct} />
+            <ProductEditor
+              product={activeProduct}
+              labelFormat={labelFormat}
+              onLabelFormatChange={setLabelFormat}
+              onChange={handleUpdateProduct}
+            />
           </main>
         )}
 
@@ -227,7 +239,7 @@ export default function App() {
           } flex-col h-full bg-slate-100 min-w-0`}
         >
           {/* Preview Studio Toolbar */}
-          <div className="no-print h-12 shrink-0 bg-white border-b border-slate-200 px-4 flex items-center justify-between gap-3 overflow-x-auto">
+          <div className="no-print h-12 shrink-0 bg-white border-b border-slate-200 px-4 flex items-center justify-between gap-2 overflow-x-auto">
             {/* Document Type Toggle */}
             <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-md shrink-0">
               <button
@@ -258,19 +270,44 @@ export default function App() {
               </button>
             </div>
 
-            {/* Label Size & Zoom Controls */}
+            {/* Label Size, Nutrition Layout Quick Switch & Zoom Controls */}
             <div className="flex items-center gap-2 shrink-0">
               {previewDoc === 'rotulo' && (
-                <select
-                  aria-label="Formato do rótulo"
-                  value={labelFormat}
-                  onChange={(e) => setLabelFormat(e.target.value as LabelFormat)}
-                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-blue-700 focus:outline-none"
-                >
-                  <option value="100x150">100 × 150 mm</option>
-                  <option value="100x70">100 × 70 mm</option>
-                  <option value="140x80">140 × 80 mm</option>
-                </select>
+                <>
+                  <select
+                    aria-label="Formato do rótulo"
+                    value={labelFormat}
+                    onChange={(e) => setLabelFormat(e.target.value as LabelFormat)}
+                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-blue-700 focus:outline-none"
+                  >
+                    <option value="100x150">100 × 150 mm</option>
+                    <option value="100x70">100 × 70 mm</option>
+                    <option value="140x80">140 × 80 mm</option>
+                    <option value="custom">Personalizado</option>
+                  </select>
+
+                  {activeProduct.nutrition.enabled && (
+                    <select
+                      aria-label="Modelo da tabela nutricional"
+                      title="Modelo da Tabela Nutricional ANVISA"
+                      value={activeProduct.nutrition.tableLayout || 'vertical'}
+                      onChange={(e) =>
+                        handleUpdateProduct({
+                          ...activeProduct,
+                          nutrition: {
+                            ...activeProduct.nutrition,
+                            tableLayout: e.target.value as NutritionTableLayout,
+                          },
+                        })
+                      }
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:border-blue-700 focus:outline-none"
+                    >
+                      <option value="vertical">Tab. Vertical</option>
+                      <option value="horizontal">Tab. Horizontal</option>
+                      <option value="vertical-quebrado">Tab. Quebrado</option>
+                    </select>
+                  )}
+                </>
               )}
 
               <select

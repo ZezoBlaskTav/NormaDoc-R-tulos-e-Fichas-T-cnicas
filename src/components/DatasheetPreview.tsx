@@ -1,8 +1,22 @@
 import React from 'react';
-import { CATEGORY_LABELS, ProductDocument, STATUS_LABELS } from '../types/product';
+import {
+  ANIMAL_STAMP_LABELS,
+  CATEGORY_LABELS,
+  DEFAULT_LABEL_DESIGN,
+  FOOD_CLASSIFICATIONS,
+  ProductDocument,
+  STATUS_LABELS,
+} from '../types/product';
 import { normalizeEan13 } from '../utils/barcode';
-import { computeLupaAlerts, computeNutritionRows } from '../utils/nutrition';
-import { AnvisaLupas, Ean13Barcode, GhsPictogramSvg, QrCodeSvg } from './RegulatoryIcons';
+import { computeLupaAlerts } from '../utils/nutrition';
+import { AnvisaNutritionTable } from './AnvisaNutritionTable';
+import {
+  AnimalInspectionStamp,
+  AnvisaLupas,
+  Ean13Barcode,
+  GhsPictogramSvg,
+  QrCodeSvg,
+} from './RegulatoryIcons';
 
 interface DatasheetPreviewProps {
   product: ProductDocument;
@@ -12,8 +26,9 @@ interface DatasheetPreviewProps {
 export const DatasheetPreview: React.FC<DatasheetPreviewProps> = ({ product, zoom }) => {
   const { code: validEan } = normalizeEan13(product.ean13);
   const lupaAlerts = computeLupaAlerts(product.nutrition);
-  const nutritionRows = product.nutrition.enabled ? computeNutritionRows(product.nutrition) : [];
   const accent = product.labelAccentColor || '#1E3A5F';
+  const design = product.labelDesign || DEFAULT_LABEL_DESIGN;
+  const hasAnimalStamp = product.animalStamp && product.animalStamp.type !== 'nenhum';
 
   return (
     <div className="flex flex-col items-center py-6 px-4">
@@ -38,10 +53,19 @@ export const DatasheetPreview: React.FC<DatasheetPreviewProps> = ({ product, zoo
           <div className="border border-slate-900">
             <div className="grid grid-cols-12 divide-x divide-slate-900">
               <div className="col-span-3 p-3 flex flex-col justify-between bg-slate-50">
-                <div style={{ color: accent }} className="text-sm font-bold tracking-tight font-display">
-                  {product.brand}
-                </div>
-                <div className="text-[10px] text-slate-600 leading-tight mt-2">
+                {design.logoDataUrl ? (
+                  <img
+                    src={design.logoDataUrl}
+                    alt={`Logo ${product.brand}`}
+                    className="h-10 object-contain object-left mb-1"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div style={{ color: accent }} className="text-sm font-bold tracking-tight font-display">
+                    {product.brand}
+                  </div>
+                )}
+                <div className="text-[10px] text-slate-600 leading-tight mt-1">
                   {product.manufacturer.companyName}
                 </div>
               </div>
@@ -52,7 +76,16 @@ export const DatasheetPreview: React.FC<DatasheetPreviewProps> = ({ product, zoo
                 <h1 className="text-base font-bold text-slate-950 leading-snug mt-0.5">
                   {product.name}
                 </h1>
-                <div className="text-xs text-slate-600 mt-0.5">{CATEGORY_LABELS[product.category]}</div>
+                <div className="text-xs text-slate-600 mt-0.5">
+                  {CATEGORY_LABELS[product.category]}
+                  {product.category === 'alimentos' && product.foodClassification
+                    ? ` — ${
+                        FOOD_CLASSIFICATIONS.find((c) => c.id === product.foodClassification)?.name.split(' (')[0] ||
+                        ''
+                      }`
+                    : ''}
+                  {product.industryOriginText ? ` · ${product.industryOriginText}` : ''}
+                </div>
               </div>
               <div className="col-span-3 text-[10.5px] font-mono tabular-nums divide-y divide-slate-900">
                 <div className="px-2.5 py-1 flex justify-between">
@@ -103,9 +136,15 @@ export const DatasheetPreview: React.FC<DatasheetPreviewProps> = ({ product, zoo
                 <div className="text-slate-900">{product.logistics.shelfLife}</div>
               </div>
               <div>
-                <div className="text-[10px] text-slate-500">Enquadramento Legal</div>
-                <div className="text-slate-900 truncate" title={product.manufacturer.msRegistration}>
+                <div className="text-[10px] text-slate-500">Dizeres de Origem</div>
+                <div className="font-semibold text-slate-900">{product.industryOriginText || product.logistics.origin}</div>
+              </div>
+              <div className="col-span-3">
+                <div className="text-[10px] text-slate-500">Enquadramento / Registro Legal</div>
+                <div className="text-slate-900">
                   {product.manufacturer.msRegistration || 'Conforme norma vigente'}
+                  {hasAnimalStamp &&
+                    ` · ${ANIMAL_STAMP_LABELS[product.animalStamp.type]} (Registro nº ${product.animalStamp.registrationNumber})`}
                 </div>
               </div>
             </div>
@@ -182,41 +221,18 @@ export const DatasheetPreview: React.FC<DatasheetPreviewProps> = ({ product, zoo
             </section>
           )}
 
-          {/* 04. Bloco Regulatório Específico: Nutricional (ANVISA) ou Segurança Química (GHS) */}
+          {/* 04. Bloco Regulatório Específico */}
           {product.nutrition.enabled && (
             <section className="space-y-2.5">
-              <div className="flex items-center justify-between border-b border-slate-300 pb-1">
+              <div className="flex items-center justify-between border-b border-slate-300 pb-1 gap-3">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900">
                   04. Perfil Nutricional (RDC 429 / IN 75 ANVISA)
                 </h2>
-                <AnvisaLupas alerts={lupaAlerts} compact />
+                <AnvisaLupas alerts={lupaAlerts} layout={design.lupaLayout || 'horizontal'} scale={0.95} />
               </div>
-              <table className="w-full text-xs border border-slate-300 border-collapse tabular-nums">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-300">
-                    <th className="px-3 py-1.5 text-left font-semibold">
-                      Nutriente (Porção de {product.nutrition.servingSize} {product.nutrition.servingUnit} — {product.nutrition.householdMeasure})
-                    </th>
-                    <th className="px-3 py-1.5 text-right font-semibold">100 {product.nutrition.servingUnit}</th>
-                    <th className="px-3 py-1.5 text-right font-semibold">
-                      Porção ({product.nutrition.servingSize} {product.nutrition.servingUnit})
-                    </th>
-                    <th className="px-3 py-1.5 text-right font-semibold w-20">%VD*</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {nutritionRows.map((row) => (
-                    <tr key={row.key}>
-                      <td className={`px-3 py-1 ${row.indent ? 'pl-6 text-slate-700' : 'font-medium text-slate-900'}`}>
-                        {row.label} ({row.unit})
-                      </td>
-                      <td className="px-3 py-1 text-right font-mono">{row.per100}</td>
-                      <td className="px-3 py-1 text-right font-mono">{row.perServing}</td>
-                      <td className="px-3 py-1 text-right font-mono font-medium">{row.vdPercent || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="max-w-lg">
+                <AnvisaNutritionTable nutrition={product.nutrition} scale={1.08} />
+              </div>
             </section>
           )}
 
@@ -324,13 +340,14 @@ export const DatasheetPreview: React.FC<DatasheetPreviewProps> = ({ product, zoo
             </div>
           </section>
 
-          {/* Footer: Barcodes + Sign-off */}
+          {/* Footer: Barcodes, Animal Stamp + Sign-off */}
           <footer className="pt-3 border-t border-slate-300 flex items-end justify-between gap-6">
             <div className="flex items-center gap-4">
               <Ean13Barcode value={product.ean13} width={140} height={46} />
               {product.showQrCode && (
                 <QrCodeSvg value={`${product.sku}|${validEan}|REV${product.revision}`} size={46} />
               )}
+              {hasAnimalStamp && <AnimalInspectionStamp stamp={product.animalStamp} />}
             </div>
             <div className="flex-1 grid grid-cols-2 gap-6 text-center text-[11px] pt-4">
               <div className="border-t border-slate-400 pt-1">

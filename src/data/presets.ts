@@ -1,6 +1,122 @@
-import { ProductCategory, ProductDocument } from '../types/product';
+import {
+  DEFAULT_ANIMAL_STAMP,
+  DEFAULT_LABEL_DESIGN,
+  ProductCategory,
+  ProductDocument,
+} from '../types/product';
 
 export const INITIAL_PRODUCTS: ProductDocument[] = [
+  {
+    id: 'prod-doce-leite-00',
+    name: 'Doce de Leite Cremoso Tradicional',
+    brand: 'FAZENDA MANTIQUEIRA',
+    subtitle: 'Doce de leite pastoso concentrado em tacho de cobre',
+    sku: 'FM-LAC-014',
+    ean13: '7898451200147',
+    batchFormat: 'L: 2611L-09',
+    validityDisplay: 'VAL: 18/08/2027',
+    netWeightDisplay: 'Peso Líq. 400 g',
+    industryOriginText: 'INDÚSTRIA BRASILEIRA',
+    category: 'alimentos',
+    foodClassification: 'laticinios',
+    status: 'aprovado',
+    revision: '02',
+    issueDate: '2026-11-12',
+    reviewDate: '2027-11-12',
+    labelAccentColor: '#B45309',
+    description:
+      'Doce de leite pastoso elaborado com leite integral fresco padronizado e açúcar cristal, cozido lentamente até atingir coloração caramelo âmbar, textura cremosa e brilho característico.',
+    usageInstructions:
+      'Pronto para o consumo. Ideal para acompanhamento de queijos, pães, torradas e aplicações de confeitaria.',
+    precautionsText:
+      'Conservar em local seco e fresco. Após aberto, manter sob refrigeração (2°C a 8°C) e consumir em até 15 dias.',
+    ingredientsText:
+      'Leite integral pasteurizado, açúcar cristal, bicarbonato de sódio (regulador de acidez INS 500ii) e sorbato de potássio (conservador INS 202).',
+    allergensText: 'ALÉRGICOS: CONTÉM LEITE.',
+    glutenDeclaration: 'NÃO CONTÉM GLÚTEN',
+    lactoseDeclaration: 'CONTÉM LACTOSE',
+    paoMonths: '',
+    ingredientsList: [
+      { id: 'dl-1', name: 'Leite integral pasteurizado', functionOrDetail: 'Matéria-prima base láctea', percentage: '76,5%' },
+      { id: 'dl-2', name: 'Açúcar cristal', functionOrDetail: 'Edulcorante e corpo', percentage: '23,2%' },
+      { id: 'dl-3', name: 'Bicarbonato de sódio (INS 500ii)', functionOrDetail: 'Regulador de acidez', percentage: '0,2%' },
+      { id: 'dl-4', name: 'Sorbato de potássio (INS 202)', functionOrDetail: 'Conservador', percentage: '0,1%' },
+    ],
+    technicalParams: [
+      { id: 'dt-1', name: 'Teor de sólidos solúveis', method: 'Refratometria (20°C)', specification: '68,0 – 71,0', unit: '°Brix' },
+      { id: 'dt-2', name: 'Umidade máxima', method: 'MAPA IN 68/2006', specification: '≤ 30,0', unit: '%' },
+      { id: 'dt-3', name: 'Gordura láctea', method: 'Gerber / Mojonnier', specification: '6,0 – 8,5', unit: '%' },
+      { id: 'dt-4', name: 'Proteínas lácteas', method: 'Kjeldahl (N × 6,38)', specification: '≥ 5,0', unit: '%' },
+    ],
+    nutrition: {
+      enabled: true,
+      physicalState: 'solido',
+      tableLayout: 'vertical',
+      servingSize: 20,
+      servingUnit: 'g',
+      householdMeasure: '1 colher de sopa',
+      servingsPerPackage: '20 porções',
+      energyKcal100: 318,
+      carbs100: 56.0,
+      totalSugars100: 54.5,
+      addedSugars100: 42.0,
+      proteins100: 6.4,
+      totalFat100: 7.5,
+      saturatedFat100: 6.4,
+      transFat100: 0,
+      fiber100: 0,
+      sodiumMg100: 115,
+      lupaMode: 'auto',
+      manualLupaSugar: false,
+      manualLupaSatFat: false,
+      manualLupaSodium: false,
+    },
+    ghs: {
+      enabled: false,
+      signalWord: 'NENHUMA',
+      pictograms: [],
+      hazardStatements: [],
+      precautionStatements: [],
+      ppeRequired: '',
+      unNumber: '',
+      hazardClass: '',
+    },
+    animalStamp: {
+      type: 'SIF',
+      registrationNumber: '3842',
+      regionLabel: 'BRASIL',
+      stampSizePx: 58,
+    },
+    labelDesign: {
+      ...DEFAULT_LABEL_DESIGN,
+      lupaLayout: 'horizontal',
+    },
+    logistics: {
+      primaryPackaging: 'Pote de vidro transparente 400 g com tampa metálica twist-off 63 mm',
+      secondaryPackaging: 'Bandeja termoencolhível com 12 potes',
+      grossWeight: '615 g (un.)',
+      dimensionsMm: '78 × 78 × 112 mm',
+      stackingMax: '5 camadas',
+      storageConditions: 'Temperatura ambiente (15°C a 25°C) antes de aberto',
+      shelfLife: '9 meses a partir da data de fabricação',
+      ncmCode: '1901.90.20',
+      origin: 'Nacional — Indústria Brasileira',
+    },
+    manufacturer: {
+      companyName: 'Laticínios Serra da Mantiqueira Ltda.',
+      cnpj: '21.509.330/0001-18',
+      address: 'Estrada Municipal KM 12 — Itajubá/MG — CEP 37500-000',
+      sacPhone: '0800 321 4400',
+      sacEmail: 'sac@fazendamantiqueira.com.br',
+      website: 'www.fazendamantiqueira.com.br',
+      technicalResponsible: 'Méd. Vet. Dr. Lucas Andrade Ribeiro',
+      professionalRegistry: 'CRMV-MG 14892',
+      msRegistration: 'Registro no Ministério da Agricultura SIF/DIPOA sob nº 0019/3842',
+    },
+    showQrCode: true,
+    showRecyclableSymbol: true,
+    showKeepDrySymbol: false,
+  },
   {
     id: 'prod-granola-01',
     name: 'Granola Artesanal Mel & Castanha-do-Pará',
@@ -11,7 +127,9 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     batchFormat: 'L: 2611A-04',
     validityDisplay: 'VAL: 18/05/2027',
     netWeightDisplay: 'Peso Líq. 400 g',
+    industryOriginText: 'INDÚSTRIA BRASILEIRA',
     category: 'alimentos',
+    foodClassification: 'cereais_panificacao',
     status: 'aprovado',
     revision: '03',
     issueDate: '2026-11-10',
@@ -48,6 +166,7 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     nutrition: {
       enabled: true,
       physicalState: 'solido',
+      tableLayout: 'vertical',
       servingSize: 40,
       servingUnit: 'g',
       householdMeasure: '1/2 xícara de chá',
@@ -77,6 +196,8 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
       unNumber: '',
       hazardClass: '',
     },
+    animalStamp: { ...DEFAULT_ANIMAL_STAMP },
+    labelDesign: { ...DEFAULT_LABEL_DESIGN },
     logistics: {
       primaryPackaging: 'Stand-up pouch laminado BOPP/PEBD 120 micras com zíper hermético',
       secondaryPackaging: 'Caixa de papelão ondulado onda B contendo 12 unidades',
@@ -113,6 +234,7 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     batchFormat: 'L: 2611Q-18',
     validityDisplay: 'VAL: 24 MESES',
     netWeightDisplay: 'Conteúdo Líq. 5 L',
+    industryOriginText: 'INDÚSTRIA BRASILEIRA',
     category: 'quimicos',
     status: 'aprovado',
     revision: '05',
@@ -149,6 +271,7 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     nutrition: {
       enabled: false,
       physicalState: 'liquido',
+      tableLayout: 'horizontal',
       servingSize: 100,
       servingUnit: 'ml',
       householdMeasure: '',
@@ -187,6 +310,8 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
       unNumber: 'ONU 1760',
       hazardClass: 'Classe 8 — Substância Corrosiva (GE II)',
     },
+    animalStamp: { ...DEFAULT_ANIMAL_STAMP },
+    labelDesign: { ...DEFAULT_LABEL_DESIGN },
     logistics: {
       primaryPackaging: 'Bombona PEAD natural de alta densidade 5 L com tampa lacre e batoque anti-vazamento',
       secondaryPackaging: 'Caixa reforçada com 4 bombonas (20 L)',
@@ -223,6 +348,7 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     batchFormat: 'L: 26K092',
     validityDisplay: 'VAL: 11/2028',
     netWeightDisplay: 'Conteúdo 30 ml',
+    industryOriginText: 'INDÚSTRIA BRASILEIRA',
     category: 'cosmeticos',
     status: 'revisao',
     revision: '02',
@@ -260,6 +386,7 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     nutrition: {
       enabled: false,
       physicalState: 'liquido',
+      tableLayout: 'vertical',
       servingSize: 100,
       servingUnit: 'ml',
       householdMeasure: '',
@@ -289,6 +416,8 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
       unNumber: '',
       hazardClass: '',
     },
+    animalStamp: { ...DEFAULT_ANIMAL_STAMP },
+    labelDesign: { ...DEFAULT_LABEL_DESIGN },
     logistics: {
       primaryPackaging: 'Frasco vidro âmbar 30 ml com cânula conta-gotas de vidro e bulbo nitrílico',
       secondaryPackaging: 'Cartucho papel cartão triplex 300 g/m² com verniz fosco',
@@ -325,6 +454,7 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     batchFormat: 'L: 26E-2108',
     validityDisplay: 'VAL: 12 MESES',
     netWeightDisplay: 'Kit 1,0 kg (A+B)',
+    industryOriginText: 'INDÚSTRIA BRASILEIRA',
     category: 'industrial',
     status: 'rascunho',
     revision: '01',
@@ -358,6 +488,7 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
     nutrition: {
       enabled: false,
       physicalState: 'liquido',
+      tableLayout: 'vertical',
       servingSize: 100,
       servingUnit: 'g',
       householdMeasure: '',
@@ -395,6 +526,8 @@ export const INITIAL_PRODUCTS: ProductDocument[] = [
       unNumber: 'ONU 3082',
       hazardClass: 'Classe 9 — Substância Perigosa para o Meio Ambiente',
     },
+    animalStamp: { ...DEFAULT_ANIMAL_STAMP },
+    labelDesign: { ...DEFAULT_LABEL_DESIGN },
     logistics: {
       primaryPackaging: 'Lata metálica revestida (Comp. A: 690 g) + Frasco PEAD (Comp. B: 310 g)',
       secondaryPackaging: 'Caixa de papelão dupla parede com 6 kits',
@@ -448,7 +581,10 @@ export function createNewProduct(category: ProductCategory): ProductDocument {
     batchFormat: 'L: 2611-01',
     validityDisplay: 'VAL: 12 MESES',
     netWeightDisplay: isFood ? 'Peso Líq. 250 g' : isCosm ? 'Conteúdo 100 ml' : 'Conteúdo Líq. 1 L',
+    industryOriginText: 'INDÚSTRIA BRASILEIRA',
     category,
+    foodClassification: isFood ? 'cereais_panificacao' : undefined,
+    alcoholWarning: '',
     status: 'rascunho',
     revision: '01',
     issueDate: today,
@@ -475,6 +611,7 @@ export function createNewProduct(category: ProductCategory): ProductDocument {
     nutrition: {
       enabled: isFood,
       physicalState: 'solido',
+      tableLayout: 'vertical',
       servingSize: 30,
       servingUnit: 'g',
       householdMeasure: '2 colheres de sopa',
@@ -504,6 +641,8 @@ export function createNewProduct(category: ProductCategory): ProductDocument {
       unNumber: '',
       hazardClass: '',
     },
+    animalStamp: { ...DEFAULT_ANIMAL_STAMP },
+    labelDesign: { ...DEFAULT_LABEL_DESIGN },
     logistics: {
       primaryPackaging: 'Embalagem primária especificada',
       secondaryPackaging: 'Caixa coletiva padrão',
@@ -529,5 +668,43 @@ export function createNewProduct(category: ProductCategory): ProductDocument {
     showQrCode: true,
     showRecyclableSymbol: true,
     showKeepDrySymbol: true,
+  };
+}
+
+export function migrateProductDocument(raw: Partial<ProductDocument>): ProductDocument {
+  const base = createNewProduct(raw.category || 'alimentos');
+  return {
+    ...base,
+    ...raw,
+    industryOriginText: raw.industryOriginText ?? 'INDÚSTRIA BRASILEIRA',
+    nutrition: {
+      ...base.nutrition,
+      ...(raw.nutrition || {}),
+      tableLayout: raw.nutrition?.tableLayout || 'vertical',
+    },
+    ghs: {
+      ...base.ghs,
+      ...(raw.ghs || {}),
+    },
+    animalStamp: {
+      ...DEFAULT_ANIMAL_STAMP,
+      ...(raw.animalStamp || {}),
+    },
+    labelDesign: {
+      ...DEFAULT_LABEL_DESIGN,
+      ...(raw.labelDesign || {}),
+      sectionOrder:
+        raw.labelDesign?.sectionOrder && raw.labelDesign.sectionOrder.length === 4
+          ? raw.labelDesign.sectionOrder
+          : DEFAULT_LABEL_DESIGN.sectionOrder,
+    },
+    logistics: {
+      ...base.logistics,
+      ...(raw.logistics || {}),
+    },
+    manufacturer: {
+      ...base.manufacturer,
+      ...(raw.manufacturer || {}),
+    },
   };
 }

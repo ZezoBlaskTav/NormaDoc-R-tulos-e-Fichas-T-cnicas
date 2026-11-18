@@ -19,6 +19,14 @@ export function evaluateCompliance(product: ProductDocument): ComplianceCheckIte
       detail: ean.isValid ? `GTIN ${ean.code} verificado` : 'Dígito verificador inconsistente',
     },
     {
+      id: 'origin-text',
+      label: 'Dizeres de Origem no Rótulo',
+      passed: Boolean((product.industryOriginText || '').trim()),
+      detail: product.industryOriginText
+        ? `Exibido: "${product.industryOriginText}"`
+        : 'Informe "INDÚSTRIA BRASILEIRA" ou país de origem',
+    },
+    {
       id: 'manufacturer',
       label: 'Identificação legal e SAC',
       passed: Boolean(
@@ -50,7 +58,7 @@ export function evaluateCompliance(product: ProductDocument): ComplianceCheckIte
       id: 'food-nutrition',
       label: 'Tabela Nutricional RDC 429',
       passed: product.nutrition.enabled && product.nutrition.servingSize > 0,
-      detail: 'Valores por 100g/ml, porção e %VD ativos',
+      detail: `Modelo ${product.nutrition.tableLayout || 'vertical'} ativo com %VD`,
     });
     checks.push({
       id: 'food-allergens',
